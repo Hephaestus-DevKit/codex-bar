@@ -55,23 +55,20 @@ object NetworkModule {
     @Singleton
     fun provideJson(): Json = Json {
         ignoreUnknownKeys = true
-        coerceInputValues = true
-        isLenient = true
+        encodeDefaults = true
     }
 
     private fun baseOkHttpBuilder(): OkHttpClient.Builder {
         val builder = OkHttpClient.Builder()
+            .callTimeout(40, TimeUnit.SECONDS)
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .retryOnConnectionFailure(false)
             .addInterceptor(RetryInterceptor())
 
-        if (BuildConfig.IS_DEBUG) {
-            val logging = HttpLoggingInterceptor().apply {
-                level = HttpLoggingInterceptor.Level.BASIC
-            }
-            builder.addInterceptor(logging)
-        }
 
         return builder
     }

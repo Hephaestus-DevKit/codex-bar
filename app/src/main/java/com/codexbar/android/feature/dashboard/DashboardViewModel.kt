@@ -26,6 +26,8 @@ class DashboardViewModel @Inject constructor(
     @ClaudeRepository private val claudeRepository: QuotaRepository,
     @CodexRepository private val codexRepository: QuotaRepository,
     @GeminiRepository private val geminiRepository: QuotaRepository,
+    private val liveState: com.codexbar.android.core.monitoring.LiveQuotaState,
+    private val chips: com.codexbar.android.core.monitoring.ChipNotifications,
     private val prefsManager: EncryptedPrefsManager
 ) : ViewModel() {
 
@@ -67,10 +69,13 @@ class DashboardViewModel @Inject constructor(
 
             val results = deferreds.map { it.await() }
 
+            results.forEach { (account, result) -> liveState.record(account, result) }
+            chips.publish(liveState.readings())
             val successCards = mutableListOf<ServiceCardData>()
             val errors = mutableMapOf<String, AppError>()
 
             for ((account, result) in results) {
+                if (!prefsManager.isCurrent(account)) continue
                 when (result) {
                     is Result.Success -> {
                         successCards.add(mapToCardData(result.value))

@@ -31,7 +31,15 @@ class GeminiRepositoryImpl @Inject constructor(
         return fetchQuota(account)
     }
 
-    override suspend fun fetchQuota(account: CredentialAccount): Result<QuotaInfo, AppError> {
+    override suspend fun fetchQuota(account: CredentialAccount): Result<QuotaInfo, AppError> =
+        AccountLocks.withAccount(account) {
+            val current = prefsManager.loadCredentialAccount(account.service, account.id)
+                ?: return@withAccount Result.Failure(AppError.CredentialNotFound(account.service))
+            if (current.generation != account.generation) return@withAccount Result.Failure(AppError.CredentialNotFound(account.service))
+            fetchCurrent(current)
+        }
+
+    private suspend fun fetchCurrent(account: CredentialAccount): Result<QuotaInfo, AppError> {
         val credential = account.credential as? Credential.GeminiCredential
             ?: return Result.Failure(AppError.CredentialNotFound(AiService.GEMINI))
 
@@ -188,7 +196,7 @@ class GeminiRepositoryImpl @Inject constructor(
                     oauthClientId = credential.oauthClientId,
                     oauthClientSecret = credential.oauthClientSecret
                 )
-                prefsManager.saveCredential(AiService.GEMINI, account.id, account.label, newCredential)
+                if (!prefsManager.saveRefreshed(account.copy(credential = credential), newCredential)) return null
                 newCredential
             } else {
                 null

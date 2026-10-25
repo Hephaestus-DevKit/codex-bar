@@ -10,14 +10,15 @@ import javax.inject.Singleton
 
 /**
  * Manages per-widget configuration (selected services) and cached quota data.
- * Uses plain SharedPreferences (not encrypted) since widget data is non-sensitive display info.
+ * Account labels and cached usage are encrypted with the Android Keystore master key.
  */
 @Singleton
 class WidgetPrefsManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val securePrefs: com.codexbar.android.core.security.EncryptedPrefsManager
 ) {
     private val prefs: SharedPreferences by lazy {
-        context.getSharedPreferences("codexbar_widget_prefs", Context.MODE_PRIVATE)
+        securePrefs.displayPrefs
     }
 
     // --- Per-widget service selection ---

@@ -25,10 +25,10 @@ object ClaudeDto {
     @Serializable
     data class OAuthExtraUsage(
         @SerialName("is_enabled") val isEnabled: Boolean = false,
-        @SerialName("monthly_limit") val monthlyLimit: Double = 0.0,
-        @SerialName("used_credits") val usedCredits: Double = 0.0,
-        val utilization: Double = 0.0,
-        val currency: String = "USD"
+        @SerialName("monthly_limit") val monthlyLimit: Double? = null,
+        @SerialName("used_credits") val usedCredits: Double? = null,
+        val utilization: Double? = null,
+        val currency: String? = null
     )
 
     @Serializable

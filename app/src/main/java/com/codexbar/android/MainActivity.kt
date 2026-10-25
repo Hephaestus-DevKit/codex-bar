@@ -50,6 +50,7 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalPermissionsApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
 
         setContent {
@@ -151,7 +152,7 @@ class MainActivity : ComponentActivity() {
                         composable("dashboard") {
                             DashboardScreen(
                                 onNavigateToCredentials = {
-                                    navController.navigate("credentials")
+                                    startActivity(Intent(this@MainActivity, PhoneAccountsActivity::class.java))
                                 },
                                 onNavigateToSettings = {
                                     navController.navigate("settings")

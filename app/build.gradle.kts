@@ -9,20 +9,21 @@ plugins {
 
 android {
     namespace = "com.codexbar.android"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.codexbar.android"
+        applicationId = "com.local.aquota"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 10000
-        versionName = "1.0.0"
+        targetSdk = 36
+        versionCode = 10005
+        versionName = "1.1.4-local"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         debug {
+            applicationIdSuffix = ".debug"
             isMinifyEnabled = false
             buildConfigField("Boolean", "IS_DEBUG", "true")
         }
@@ -118,7 +119,10 @@ dependencies {
     implementation(libs.accompanist.permissions)
 
     // Testing
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation(libs.mockwebserver)

@@ -38,6 +38,8 @@ class QuotaRefreshWorker @AssistedInject constructor(
     @GeminiRepository private val geminiRepository: QuotaRepository,
     private val prefsManager: EncryptedPrefsManager,
     private val notificationService: QuotaNotificationService,
+    private val liveState: com.codexbar.android.core.monitoring.LiveQuotaState,
+    private val chips: com.codexbar.android.core.monitoring.ChipNotifications,
     private val widgetPrefsManager: WidgetPrefsManager
 ) : CoroutineWorker(context, workerParams) {
 
@@ -55,7 +57,9 @@ class QuotaRefreshWorker @AssistedInject constructor(
                 }.awaitAll()
             }
 
-            val successfulQuotas = quotas.mapNotNull { result ->
+            quotas.forEach { (account, result) -> liveState.record(account, result) }
+            chips.publish(liveState.readings())
+            val successfulQuotas = quotas.filter { prefsManager.isCurrent(it.first) }.mapNotNull { result ->
                 when (val quotaResult = result.second) {
                     is DomainResult.Success -> quotaResult.value
                     is DomainResult.Failure -> null
@@ -64,11 +68,14 @@ class QuotaRefreshWorker @AssistedInject constructor(
 
             if (successfulQuotas.isNotEmpty()) {
                 // Cache quota data for widgets
-                cacheQuotaData(successfulQuotas)
+                quotas.forEach { (account, result) ->
+                    if (result is DomainResult.Success) prefsManager.runIfCurrent(account) { cacheQuotaData(listOf(result.value)) }
+                }
 
                 if (prefsManager.isNotificationsEnabled()) {
-                    notificationService.showQuotaNotification(successfulQuotas)
-                    checkForResets(successfulQuotas)
+                    quotas.forEach { (account, result) ->
+                        if (result is DomainResult.Success) prefsManager.runIfCurrent(account) { checkForResets(listOf(result.value)) }
+                    }
                 }
 
                 // Update all widgets

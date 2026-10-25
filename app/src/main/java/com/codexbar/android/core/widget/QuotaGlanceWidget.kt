@@ -52,7 +52,7 @@ import kotlin.math.roundToInt
 class QuotaGlanceWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val widgetPrefs = WidgetPrefsManager(context)
+        val widgetPrefs = WidgetPrefsManager(context, com.codexbar.android.core.security.EncryptedPrefsManager(context))
         val appWidgetId = GlanceAppWidgetManager(context).getAppWidgetId(id)
         val selectedServices = widgetPrefs.getSelectedServices(appWidgetId)
 

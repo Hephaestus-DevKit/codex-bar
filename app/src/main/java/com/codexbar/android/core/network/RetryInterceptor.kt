@@ -1,44 +1,32 @@
 package com.codexbar.android.core.network
 
+import java.io.IOException
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.concurrent.ConcurrentHashMap
 import okhttp3.Interceptor
 import okhttp3.Response
-import java.io.IOException
-import kotlin.math.min
-import kotlin.math.pow
 
-class RetryInterceptor(
-    private val maxRetries: Int = 3,
-    private val maxWaitSeconds: Long = 60
-) : Interceptor {
-
+/** No automatic replay of token POSTs; server cooldowns also apply to manual refresh. */
+class RetryInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        val request = chain.request()
-        var response = chain.proceed(request)
-        var attempt = 0
-
-        while (response.code == 429 && attempt < maxRetries) {
-            attempt++
-
-            val retryAfter = response.header("Retry-After")?.toLongOrNull()
-            response.close()
-            val waitMs = if (retryAfter != null) {
-                min(retryAfter * 1000, maxWaitSeconds * 1000)
-            } else {
-                // Exponential backoff: 1s, 2s, 4s...
-                val backoff = 2.0.pow(attempt - 1).toLong() * 1000
-                min(backoff, maxWaitSeconds * 1000)
-            }
-
-            try {
-                Thread.sleep(waitMs)
-            } catch (_: InterruptedException) {
-                Thread.currentThread().interrupt()
-                throw IOException("Retry interrupted")
-            }
-
-            response = chain.proceed(request)
+        val key = chain.request().url.host
+        if ((blockedUntil[key] ?: 0) > System.currentTimeMillis()) {
+            throw IOException("Provider cooldown is active; retry later")
         }
-
-        return response
+        return chain.proceed(chain.request()).also { response ->
+            if (response.code == 429) {
+                blockedUntil[key] = System.currentTimeMillis() + retryDelaySeconds(response.header("Retry-After")) * 1000L
+            }
+        }
+    }
+    companion object {
+        private val blockedUntil = ConcurrentHashMap<String, Long>()
+        fun retryDelaySeconds(value: String?, nowMillis: Long = System.currentTimeMillis()): Long {
+            val seconds = value?.trim()?.toLongOrNull() ?: runCatching {
+                (ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() - nowMillis) / 1000
+            }.getOrDefault(300L)
+            return seconds.coerceIn(60, 86400)
+        }
     }
 }

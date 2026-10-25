@@ -10,6 +10,28 @@ home-screen widgets, Quick Settings tiles, encrypted local credential storage, a
 compatibility for ColorOS/OPlus, realme UI, HyperOS/MIUI, OriginOS, HarmonyOS/MagicOS, Samsung, and
 stock Android.
 
+## Phone-only live quota monitor
+
+The launcher now offers OpenAI device sign-in and Claude browser sign-in without a computer.
+Connect both accounts, allow notifications/status-bar chips, and tap **Start live monitoring**.
+Chrome has been reported working for Claude; some browsers may fail the provider's verification.
+Keep authorization codes, callback URLs, and tokens private.
+
+Monitoring polls about once per minute while Android permits. By default one native chip shows
+OpenAI/Claude remaining quota, for example `80/65`. A missing, stale, or failed reading becomes `?`.
+The separate-chip option requests one chip per account, but Android may display only one.
+Native chips require a compatible Android 16+ system and promotion permission; older systems
+show ordinary notifications. Monitoring stops when explicitly stopped or the app process is killed;
+there is no hidden restart after force-stop or reboot.
+
+The notification has only a provider title and Stop action, with no body or expanded text.
+Its channel defaults to silent LOW importance. Android requires a title and a channel above MIN
+for chip promotion, and controls the row's position in the shade. Existing user channel settings
+are preserved. Swiping restores the cached notification while monitoring is active; **Stop** removes it.
+
+This build uses the distinct `com.local.aquota` package and AI Quota label. It does not replace an
+upstream CodexBar installation. See [LOCAL-BUILD.md](LOCAL-BUILD.md) for build and device checks.
+
 ## Features
 
 - Quota monitoring for Claude, Codex / ChatGPT, and Gemini.
@@ -59,13 +81,15 @@ you can revoke while testing APKs from GitHub Releases.
 
 ### Claude
 
-Claude uses OAuth credentials from Claude Code. Store both access token and refresh token in
-Settings. The app treats Claude access tokens as short-lived and proactively refreshes them before
+Use **Connect Claude** on the launcher for phone-only OAuth (profile/usage permission).
+Manual credentials from Claude Code remain available in Settings. The app treats Claude access tokens as short-lived and proactively refreshes them before
 expiry. OAuth `invalid_grant` still requires re-authentication.
 
 ### Codex / ChatGPT
 
-Use the access token and refresh token from the Codex CLI auth file, usually `~/.codex/auth.json`.
+Use **Connect OpenAI** on the launcher for phone-only device authorization. Manual entry
+of an access token and refresh token from the Codex CLI auth file, usually `~/.codex/auth.json`,
+remains available.
 The optional account ID is passed as `ChatGPT-Account-Id` when provided.
 
 ### Gemini
@@ -84,7 +108,7 @@ These values can be extracted from Gemini CLI credentials and source constants.
 Requirements:
 
 - JDK 17
-- Android SDK with API 35+
+- Android SDK with API 36
 - Android Studio or Gradle Wrapper
 
 ```bash

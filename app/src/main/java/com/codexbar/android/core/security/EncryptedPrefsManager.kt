@@ -10,6 +10,8 @@ import com.codexbar.android.core.domain.model.CredentialAccount
 import com.codexbar.android.core.domain.model.QuotaInfo
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.time.Instant
+import kotlinx.coroutines.launch
+import androidx.glance.appwidget.updateAll
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,6 +35,12 @@ class EncryptedPrefsManager @Inject constructor(
         )
     }
 
+    val displayPrefs: SharedPreferences by lazy {
+        EncryptedSharedPreferences.create(context, "codexbar_display_secure", masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM)
+    }
+
     fun createAccountId(service: AiService): String {
         val base = "${service.name.lowercase()}_${System.currentTimeMillis()}"
         val existing = loadAccountIds(service).toSet()
@@ -52,6 +60,7 @@ class EncryptedPrefsManager @Inject constructor(
         saveCredential(service, accountId, label, credential)
     }
 
+    @Synchronized
     fun saveCredential(
         service: AiService,
         accountId: String,
@@ -64,6 +73,9 @@ class EncryptedPrefsManager @Inject constructor(
 
         val editor = prefs.edit()
         editor.putString(accountIdsKey(service), accountIds.joinToString(","))
+        val nextGeneration = sessionEpoch() + 1
+        editor.putLong("session_epoch", nextGeneration)
+        editor.putLong("${accountPrefix(service, safeAccountId)}_generation", nextGeneration)
         writeCredential(editor, accountPrefix(service, safeAccountId), label, credential)
         editor.apply()
     }
@@ -72,6 +84,7 @@ class EncryptedPrefsManager @Inject constructor(
         return loadCredentialAccounts(service).firstOrNull()?.credential
     }
 
+    @Synchronized
     fun loadCredentialAccount(service: AiService, accountId: String): CredentialAccount? {
         val credential = readCredential(service, accountPrefix(service, accountId)) ?: return null
         val label = prefs.getString("${accountPrefix(service, accountId)}_label", null)
@@ -80,10 +93,12 @@ class EncryptedPrefsManager @Inject constructor(
             id = accountId,
             service = service,
             label = label,
-            credential = credential
+            credential = credential,
+            generation = generation(service, accountId)
         )
     }
 
+    @Synchronized
     fun loadCredentialAccounts(service: AiService): List<CredentialAccount> {
         migrateLegacyCredentialIfNeeded(service)
         return loadAccountIds(service).mapNotNull { accountId ->
@@ -91,19 +106,23 @@ class EncryptedPrefsManager @Inject constructor(
         }
     }
 
+    @Synchronized
     fun deleteCredential(service: AiService) {
-        val editor = prefs.edit()
+        clearDisplayCache()
+        val editor = prefs.edit().putLong("session_epoch", sessionEpoch() + 1)
         prefs.all.keys
             .filter { it.startsWith(service.name) || it.startsWith("reset_${service.name}_") }
             .forEach { editor.remove(it) }
         editor.apply()
     }
 
+    @Synchronized
     fun deleteCredential(service: AiService, accountId: String) {
-        val editor = prefs.edit()
+        clearDisplayCache()
+        val editor = prefs.edit().putLong("session_epoch", sessionEpoch() + 1)
         val prefix = accountPrefix(service, accountId)
         prefs.all.keys
-            .filter { it.startsWith(prefix) || it.startsWith("reset_${service.name}_${accountId}_") }
+            .filter { it.startsWith("${prefix}_") || it.startsWith("reset_${service.name}_${accountId}_") }
             .forEach { editor.remove(it) }
 
         val remainingIds = loadAccountIds(service).filterNot { it == accountId }
@@ -115,8 +134,10 @@ class EncryptedPrefsManager @Inject constructor(
         editor.apply()
     }
 
+    @Synchronized
     fun deleteAllCredentials() {
-        val editor = prefs.edit()
+        clearDisplayCache()
+        val editor = prefs.edit().putLong("session_epoch", sessionEpoch() + 1)
         prefs.all.keys
             .filter { key ->
                 AiService.entries.any { service ->
@@ -127,9 +148,55 @@ class EncryptedPrefsManager @Inject constructor(
         editor.apply()
     }
 
+    @Synchronized
+    fun sessionEpoch(): Long = prefs.getLong("session_epoch", 0)
+
+    @Synchronized
+    fun saveNewIfEpoch(service: AiService, credential: Credential, expectedEpoch: Long): Boolean {
+        if (sessionEpoch() != expectedEpoch) return false
+        saveCredential(service, credential)
+        return true
+    }
+
+    private fun clearDisplayCache() {
+        displayPrefs.edit().clear().commit()
+        android.service.quicksettings.TileService.requestListeningState(context, android.content.ComponentName(context, com.codexbar.android.core.tile.QuotaTileService::class.java))
+        context.getSystemService(android.app.NotificationManager::class.java).cancelAll()
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            runCatching { com.codexbar.android.core.widget.QuotaGlanceWidget().updateAll(context) }
+        }
+    }
+
+    private fun generation(service: AiService, accountId: String): Long =
+        prefs.getLong("${accountPrefix(service, accountId)}_generation", 0)
+
+    @Synchronized
+    fun saveRefreshed(account: CredentialAccount, credential: Credential): Boolean {
+        val current = loadCredentialAccount(account.service, account.id) ?: return false
+        if (current.generation != account.generation || current.credential != account.credential) return false
+        val editor = prefs.edit()
+        writeCredential(editor, accountPrefix(account.service, account.id), current.label, credential)
+        check(editor.commit()) { "Could not persist renewed session" }
+        return true
+    }
+
+    @Synchronized
+    fun isCurrent(account: CredentialAccount): Boolean =
+        loadCredentialAccount(account.service, account.id)?.generation == account.generation
+
+    @Synchronized
+    fun runIfCurrent(account: CredentialAccount, action: () -> Unit): Boolean {
+        if (!isCurrent(account)) return false
+        action()
+        return true
+    }
+
     fun hasCredential(service: AiService): Boolean {
         return loadCredentialAccounts(service).isNotEmpty()
     }
+
+    fun useCombinedChip(): Boolean = prefs.getBoolean("combined_chip", true)
+    fun setCombinedChip(enabled: Boolean) { prefs.edit().putBoolean("combined_chip", enabled).apply() }
 
     fun getRefreshInterval(): Long {
         return prefs.getLong("refresh_interval_minutes", 30L)
@@ -181,11 +248,13 @@ class EncryptedPrefsManager @Inject constructor(
             .toMap()
     }
 
+    @Synchronized
     private fun migrateLegacyCredentialIfNeeded(service: AiService) {
         if (loadAccountIds(service).isNotEmpty()) return
         val legacy = readCredential(service, service.name) ?: return
         val editor = prefs.edit()
         val accountId = QuotaInfo.DEFAULT_ACCOUNT_ID
+        prefs.all.keys.filter { it.startsWith("${service.name}_") }.forEach { editor.remove(it) }
         editor.putString(accountIdsKey(service), accountId)
         writeCredential(editor, accountPrefix(service, accountId), defaultAccountLabel(service), legacy)
         editor.apply()

@@ -11,7 +11,7 @@ class QuotaWidgetReceiver : GlanceAppWidgetReceiver() {
 
     override fun onDeleted(context: Context, appWidgetIds: IntArray) {
         super.onDeleted(context, appWidgetIds)
-        val widgetPrefs = WidgetPrefsManager(context)
+        val widgetPrefs = WidgetPrefsManager(context, com.codexbar.android.core.security.EncryptedPrefsManager(context))
         for (id in appWidgetIds) {
             widgetPrefs.deleteWidgetConfig(id)
         }

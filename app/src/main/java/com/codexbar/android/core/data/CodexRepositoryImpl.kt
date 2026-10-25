@@ -30,7 +30,15 @@ class CodexRepositoryImpl @Inject constructor(
         return fetchQuota(account)
     }
 
-    override suspend fun fetchQuota(account: CredentialAccount): Result<QuotaInfo, AppError> {
+    override suspend fun fetchQuota(account: CredentialAccount): Result<QuotaInfo, AppError> =
+        AccountLocks.withAccount(account) {
+            val current = prefsManager.loadCredentialAccount(account.service, account.id)
+                ?: return@withAccount Result.Failure(AppError.CredentialNotFound(account.service))
+            if (current.generation != account.generation) return@withAccount Result.Failure(AppError.CredentialNotFound(account.service))
+            fetchCurrent(current)
+        }
+
+    private suspend fun fetchCurrent(account: CredentialAccount): Result<QuotaInfo, AppError> {
         val credential = account.credential as? Credential.CodexCredential
             ?: return Result.Failure(AppError.CredentialNotFound(AiService.CODEX))
 
@@ -72,7 +80,7 @@ class CodexRepositoryImpl @Inject constructor(
         } catch (e: IOException) {
             Result.Failure(AppError.NetworkError(e.message ?: "Network error", e))
         } catch (e: Exception) {
-            Result.Failure(AppError.ParseError(e.message ?: "Parse error", e))
+            Result.Failure(AppError.ParseError("OpenAI returned an unsupported usage response. Reconnect or retry later."))
         }
     }
 
@@ -91,14 +99,13 @@ class CodexRepositoryImpl @Inject constructor(
                     refreshToken = body.refreshToken ?: credential.refreshToken,
                     accountId = credential.accountId
                 )
-                prefsManager.saveCredential(AiService.CODEX, account.id, account.label, newCredential)
+                if (!prefsManager.saveRefreshed(account.copy(credential = credential), newCredential)) return null
                 newCredential
             } else {
                 val errorBody = response.errorBody()?.string() ?: ""
                 val isTerminal = CodexDto.TERMINAL_ERROR_CODES.any { errorBody.contains(it) }
-                if (isTerminal) {
-                    prefsManager.deleteCredential(AiService.CODEX, account.id)
-                }
+                // Preserve the account for an explicit reconnect; never delete a replacement.
+                if (isTerminal) return null
                 null
             }
         } catch (_: Exception) {
@@ -116,6 +123,7 @@ class CodexRepositoryImpl @Inject constructor(
             }
         }
 
+        require(windows.isNotEmpty()) { "No usage windows returned" }
         return QuotaInfo(
             service = AiService.CODEX,
             accountId = account.id,
@@ -137,6 +145,7 @@ class CodexRepositoryImpl @Inject constructor(
             }
         }
 
+        require(window.usedPercent.isFinite() && window.usedPercent in 0.0..100.0) { "Invalid usage value" }
         return UsageWindow(
             label = label,
             utilization = (window.usedPercent / 100.0).coerceIn(0.0, 1.0),

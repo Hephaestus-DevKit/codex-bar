@@ -21,7 +21,7 @@ object CodexDto {
 
     @Serializable
     data class RateLimitWindow(
-        @SerialName("used_percent") val usedPercent: Double = 0.0,
+        @SerialName("used_percent") val usedPercent: Double,
         @SerialName("reset_at") val resetAt: Long? = null, // Unix timestamp
         @SerialName("limit_window_seconds") val limitWindowSeconds: Long? = null
     )

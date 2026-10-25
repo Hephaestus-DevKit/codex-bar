@@ -24,6 +24,8 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import retrofit2.Retrofit
 
+private fun <T> anyArg(): T = org.mockito.ArgumentMatchers.any()
+
 class GeminiRepositoryImplTest {
 
     private lateinit var mockWebServer: MockWebServer
@@ -67,6 +69,11 @@ class GeminiRepositoryImplTest {
         `when`(prefsManager.loadCredentialAccounts(AiService.GEMINI)).thenReturn(
             listOf(testAccount(testCredential))
         )
+
+        `when`(prefsManager.loadCredentialAccount(AiService.GEMINI, "gemini-test")).thenAnswer {
+            prefsManager.loadCredentialAccounts(AiService.GEMINI).firstOrNull()
+        }
+        `when`(prefsManager.saveRefreshed(anyArg(), anyArg())).thenReturn(true)
 
         repository = GeminiRepositoryImpl(apiService, tokenRefreshService, prefsManager)
     }

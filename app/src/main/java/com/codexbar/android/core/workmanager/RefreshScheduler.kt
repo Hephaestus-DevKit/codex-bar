@@ -20,7 +20,7 @@ object RefreshScheduler {
 
     fun scheduleAll(context: Context, intervalMinutes: Long = currentRefreshInterval(context)) {
         schedulePeriodicRefresh(context, intervalMinutes)
-        scheduleTokenRefresh(context, intervalMinutes)
+        WorkManager.getInstance(context).cancelUniqueWork(TOKEN_WORK_NAME)
     }
 
     fun schedulePeriodicRefresh(context: Context, intervalMinutes: Long = currentRefreshInterval(context)) {
@@ -45,24 +45,7 @@ object RefreshScheduler {
     }
 
     fun scheduleTokenRefresh(context: Context, intervalMinutes: Long = currentRefreshInterval(context)) {
-        if (intervalMinutes <= 0) {
-            WorkManager.getInstance(context).cancelUniqueWork(TOKEN_WORK_NAME)
-            return
-        }
-
-        val request = PeriodicWorkRequestBuilder<TokenRefreshWorker>(
-            intervalMinutes.coerceAtLeast(15), TimeUnit.MINUTES
-        )
-            .setConstraints(networkConstraints())
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
-            .addTag("token_refresh")
-            .build()
-
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            TOKEN_WORK_NAME,
-            ExistingPeriodicWorkPolicy.UPDATE,
-            request
-        )
+        WorkManager.getInstance(context).cancelUniqueWork(TOKEN_WORK_NAME)
     }
 
     fun enqueueManualQuotaRefresh(context: Context, reason: String = "manual") {

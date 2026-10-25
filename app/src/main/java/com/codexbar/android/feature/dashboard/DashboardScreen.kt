@@ -272,7 +272,7 @@ private fun formatReset(resetsAt: Instant?): String {
 private fun formatDetailError(error: AppError): String {
     return when (error) {
         is AppError.NetworkError -> "Network error"
-        is AppError.AuthError -> if (error.isTerminal) "Re-authentication required" else "Authentication retry pending"
+        is AppError.AuthError -> if (error.service == AiService.CLAUDE && error.message.isNotBlank()) error.message else if (error.isTerminal) "Re-authentication required" else "Authentication retry pending"
         is AppError.RateLimited -> "Rate limited"
         is AppError.ParseError -> "Response parse error"
         is AppError.CredentialNotFound -> "No credentials configured"

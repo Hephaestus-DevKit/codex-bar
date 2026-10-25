@@ -24,6 +24,8 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.`when`
 import retrofit2.Retrofit
 
+private fun <T> anyArg(): T = org.mockito.ArgumentMatchers.any()
+
 class CodexRepositoryImplTest {
 
     private lateinit var mockWebServer: MockWebServer
@@ -65,6 +67,11 @@ class CodexRepositoryImplTest {
         `when`(prefsManager.loadCredentialAccounts(AiService.CODEX)).thenReturn(
             listOf(testAccount(testCredential))
         )
+
+        `when`(prefsManager.loadCredentialAccount(AiService.CODEX, "codex-test")).thenAnswer {
+            prefsManager.loadCredentialAccounts(AiService.CODEX).firstOrNull()
+        }
+        `when`(prefsManager.saveRefreshed(anyArg(), anyArg())).thenReturn(true)
 
         repository = CodexRepositoryImpl(apiService, tokenRefreshService, prefsManager)
     }
